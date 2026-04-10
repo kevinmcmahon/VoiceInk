@@ -78,6 +78,44 @@ Your normal `make all` / `make build` commands are completely unaffected.
 
 ---
 
+## Updating from Upstream
+
+If you maintain a fork with local build patches, use rebase to pull in new
+upstream releases while keeping your changes on top.
+
+### One-time setup
+
+Add the upstream remote (if you haven't already):
+
+```bash
+git remote add upstream https://github.com/Beingpax/VoiceInk.git
+```
+
+### Pulling a new upstream release
+
+```bash
+# Fetch the latest from upstream
+git fetch upstream
+
+# Rebase your local patches on top of the new upstream main
+git rebase upstream/main
+
+# Rebuild whisper from scratch (upstream may update the whisper.cpp version)
+rm -rf ~/VoiceInk-Dependencies
+make local
+
+# Copy the new build into /Applications
+ditto ~/Downloads/VoiceInk.app /Applications/VoiceInk.app
+```
+
+If the rebase conflicts, git will pause and let you resolve. With only
+build-system patches this should be rare.
+
+After rebasing, push your fork with `git push --force origin main` (force is
+required because rebase rewrites commit history).
+
+---
+
 ## Manual Build Process (Alternative)
 
 If you prefer to build manually or need more control over the build process, follow these steps:
