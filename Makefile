@@ -4,7 +4,7 @@ WHISPER_CPP_DIR := $(DEPS_DIR)/whisper.cpp
 FRAMEWORK_PATH := $(WHISPER_CPP_DIR)/build-apple/whisper.xcframework
 LOCAL_DERIVED_DATA := $(CURDIR)/.local-build
 
-.PHONY: all clean whisper setup build local check healthcheck help dev run
+.PHONY: all clean whisper fix-whisper setup build local check healthcheck help dev run
 
 # Default target
 all: check build
@@ -36,6 +36,50 @@ whisper:
 	else \
 		echo "whisper.xcframework already built in $(DEPS_DIR), skipping build"; \
 	fi
+	@$(MAKE) fix-whisper
+
+# Fix whisper.xcframework macOS framework structure.
+# Upstream build-xcframework.sh produces a flat (iOS-style) framework for
+# macOS and omits ggml headers that whisper.h depends on. This target patches
+# the xcframework in-place so Xcode can consume it on macOS.
+fix-whisper:
+	@MACOS_FW=$$(find $(FRAMEWORK_PATH) -path "*/macos-*/whisper.framework" -type d 2>/dev/null | head -1); \
+	if [ -z "$$MACOS_FW" ]; then \
+		echo "No macOS whisper.framework found in xcframework, skipping fix"; \
+		exit 0; \
+	fi; \
+	GGML_INCLUDE=$(WHISPER_CPP_DIR)/ggml/include; \
+	echo "Fixing whisper.xcframework macOS framework..."; \
+	\
+	if [ ! -d "$$MACOS_FW/Versions" ]; then \
+		echo "  Converting flat framework to versioned macOS structure..."; \
+		mkdir -p "$$MACOS_FW/Versions/A/Headers" \
+		         "$$MACOS_FW/Versions/A/Modules" \
+		         "$$MACOS_FW/Versions/A/Resources"; \
+		mv "$$MACOS_FW/Headers/"* "$$MACOS_FW/Versions/A/Headers/"; \
+		mv "$$MACOS_FW/Modules/"* "$$MACOS_FW/Versions/A/Modules/"; \
+		mv "$$MACOS_FW/Info.plist" "$$MACOS_FW/Versions/A/Resources/Info.plist"; \
+		mv "$$MACOS_FW/whisper" "$$MACOS_FW/Versions/A/whisper"; \
+		rmdir "$$MACOS_FW/Headers" "$$MACOS_FW/Modules"; \
+		ln -sf A "$$MACOS_FW/Versions/Current"; \
+		ln -sf Versions/Current/Headers "$$MACOS_FW/Headers"; \
+		ln -sf Versions/Current/Modules "$$MACOS_FW/Modules"; \
+		ln -sf Versions/Current/Resources "$$MACOS_FW/Resources"; \
+		ln -sf Versions/Current/whisper "$$MACOS_FW/whisper"; \
+	fi; \
+	\
+	HEADER_DIR="$$MACOS_FW/Versions/A/Headers"; \
+	if [ ! -f "$$HEADER_DIR/ggml.h" ]; then \
+		echo "  Copying missing ggml headers..."; \
+		cp "$$GGML_INCLUDE/ggml.h"         "$$HEADER_DIR/"; \
+		cp "$$GGML_INCLUDE/ggml-alloc.h"   "$$HEADER_DIR/"; \
+		cp "$$GGML_INCLUDE/ggml-backend.h" "$$HEADER_DIR/"; \
+		cp "$$GGML_INCLUDE/ggml-metal.h"   "$$HEADER_DIR/"; \
+		cp "$$GGML_INCLUDE/ggml-cpu.h"     "$$HEADER_DIR/"; \
+		cp "$$GGML_INCLUDE/ggml-blas.h"    "$$HEADER_DIR/"; \
+		cp "$$GGML_INCLUDE/gguf.h"         "$$HEADER_DIR/"; \
+	fi; \
+	echo "  whisper.xcframework macOS fix applied"
 
 setup: whisper
 	@echo "Whisper framework is ready at $(FRAMEWORK_PATH)"
@@ -104,6 +148,7 @@ help:
 	@echo "Available targets:"
 	@echo "  check/healthcheck  Check if required CLI tools are installed"
 	@echo "  whisper            Clone and build whisper.cpp XCFramework"
+	@echo "  fix-whisper        Patch xcframework for macOS (headers + versioned structure)"
 	@echo "  setup              Copy whisper XCFramework to VoiceInk project"
 	@echo "  build              Build the VoiceInk Xcode project"
 	@echo "  local              Build for local use (no Apple Developer certificate needed)"

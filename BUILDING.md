@@ -136,4 +136,36 @@ If you encounter any build issues:
 4. Verify all dependencies are properly installed
 5. Make sure whisper.xcframework is properly built and linked
 
+### whisper.xcframework macOS build failures
+
+The upstream `build-xcframework.sh` in whisper.cpp has two known issues that
+affect macOS builds:
+
+1. **Missing ggml headers** — `whisper.h` includes `ggml.h` and `ggml-cpu.h`,
+   but `xcodebuild -create-xcframework` does not always bundle them into the
+   final xcframework. This causes `'ggml.h' file not found` during compilation.
+
+2. **Flat framework structure** — The macOS slice of the xcframework gets
+   packaged with a flat (iOS-style) layout (`Headers/`, `Modules/`,
+   `Info.plist` at the top level). macOS requires a versioned structure
+   (`Versions/A/Headers/`, `Versions/Current` symlink, etc.). Xcode's
+   validation rejects the flat layout with: *"contains Info.plist, expected
+   Versions/Current/Resources/Info.plist since the platform does not use
+   shallow bundles"*.
+
+The Makefile's `make whisper` target automatically runs `make fix-whisper` after
+building to patch both issues. If you built the xcframework manually and hit
+these errors, run:
+
+```bash
+make fix-whisper
+```
+
+To rebuild from scratch:
+
+```bash
+make clean
+make local
+```
+
 For more help, please check the [issues](https://github.com/Beingpax/VoiceInk/issues) section or create a new issue.
